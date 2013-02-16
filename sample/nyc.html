@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+<style>
+
+body {
+  font-family: sans-serif;
+  font-size: 12px;
+}
+
+.node {
+  fill: #000;
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+.node.highlight {
+  fill: #00f;
+  stroke: #00f;
+  stroke-width: 5px;
+}
+
+.link {
+  stroke: #999;
+  stroke-opacity: .6;
+  stroke-width: 2;
+}
+
+#tooltip {
+  display: none;
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  color: #444;
+  padding: 5px;
+}
+
+</style>
+</head>
+<body>
+<a href="#" onclick="changeLayout('force');">Force-directed</a> | <a href="#" onclick="changeLayout('geo');">Geographic</a>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script>
+
+var width = 1000,
+    height = 800,
+    mode = "geo",
+    scales = {},
+    graph,
+    projection = d3.geo.albers();
+
+var force = d3.layout.force()
+    .charge(-640)
+    .gravity(0.4)
+    .friction(0.28)
+    .linkDistance(5)
+    .linkStrength(2.9)
+    .size([width, height]);
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+var tooltip = d3.select("body").append("div").attr("id", "tooltip");
+
+d3.json("nyc.json", function(error, g) {
+
+  graph = g;
+
+  force
+      .nodes(graph.nodes)
+      .links(graph.edges)
+      .start();
+
+  // *************** set up geographic projection based on lat/lon data
+  var domains = {
+    lat: {
+      min: d3.min(graph.nodes, function(d) { return parseFloat(d.stop_lat); }),
+      max: d3.max(graph.nodes, function(d) { return parseFloat(d.stop_lat); })
+    },
+    lon: {
+      min: d3.min(graph.nodes, function(d) { return parseFloat(d.stop_lon); }),
+      max: d3.max(graph.nodes, function(d) { return parseFloat(d.stop_lon); })
+    }
+  };
+  scales.lat = d3.scale.linear()
+          .domain([ domains.lat.min, domains.lat.max ])
+          .range([ height - 10, 10 ]);
+  scales.lon = d3.scale.linear()
+          .domain([ domains.lon.min, domains.lon.max ])
+          .range([ 10, width - 10 ]);
+  var center = [
+    domains.lon.min + (domains.lon.max - domains.lon.min) / 2,
+    domains.lat.min + (domains.lat.max - domains.lat.min) / 2
+  ];
+  var scalar = (domains.lon.max - domains.lon.min);
+  if ((domains.lat.max - domains.lat.min) > scalar) scalar =  domains.lat.max - domains.lat.min;
+  projection
+    .center(center)
+    .scale(200000 * scalar);
+  var r = projection([ domains.lon.min, domains.lat.max ]);
+  r = [-1 * r[0] + width/2, -1 * r[1] + height/2 ];
+  projection
+    .translate(r);
+
+  // *************** build graph
+
+  var link = svg.selectAll(".link")
+      .data(graph.edges)
+    .enter().append("line")
+      .attr("class", "link")
+      .style("stroke", function(d) { return (d.routeColor) ? "#"+d.routeColor : null; });
+
+  var node = svg.selectAll(".node")
+      .data(graph.nodes)
+    .enter().append("circle")
+      .attr("class", "node")
+      .attr("r", 3)
+      .on("mouseover", function(d) {        
+        tooltip
+          .style("display", "inline-block")
+          .style("left", (d3.event.offsetX - 5) + "px")
+          .style("top", (d3.event.offsetY - 15) + "px")
+          .text(d.stop_name);
+      })
+      .on("mouseout", function(d) {
+        tooltip.style("display", "none");
+      })
+      .on("click", function(d) {
+        d3.select(this).classed("highlight", !d3.select(this).classed("highlight"));
+      })
+      .call(force.drag);
+
+  force.on("tick", function(e) {
+
+    if (mode == "geo") {
+      graph.nodes.forEach(function(n) {
+        var p = projection([ n.stop_lon, n.stop_lat ]);
+        if (!n.fixed && !isNaN(p[0]) && !isNaN(p[1])) {
+          n.x -= (n.x - p[0]) * 0.3;
+          n.y -= (n.y - p[1]) * 0.3;          
+        }
+      });
+    }
+
+    link.attr("x1", function(d) { return d.source.x; })
+        .attr("y1", function(d) { return d.source.y; })
+        .attr("x2", function(d) { return d.target.x; })
+        .attr("y2", function(d) { return d.target.y; });
+
+    node.attr("cx", function(d) { return d.x; })
+        .attr("cy", function(d) { return d.y; });
+  });
+});
+
+function changeLayout(m) {
+  mode = m;
+  force.start();
+  return false;
+}
+
+</script>

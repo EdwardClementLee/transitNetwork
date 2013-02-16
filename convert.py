@@ -1,4 +1,4 @@
-import sys, csv, json
+import sys, csv, json, math
 
 # source folder
 folder = sys.argv[1]
@@ -8,11 +8,16 @@ if folder[-1] != "/":
 # destination file
 dest = sys.argv[2]
 
-# special map of stop ids to names
-stopIds = {}
+# proximity tolerance
+prox = 0.001
+proxName = 0.01 # proximity tolerance if the name is the same
+if len(sys.argv) > 3:
+	prox = float(sys.argv[3])
+
+
 
 # reads csv file and returns keyed dictionary of objects
-def readFile(path, idField, special):
+def readFile(path, idField, multiple):
 	d = {}
 	with open(path, "r") as f:
 
@@ -25,10 +30,7 @@ def readFile(path, idField, special):
 			for i, col in enumerate(row):
 				obj[headers[i]] = col
 
-			if special == "stops":
-				stopIds[obj["stop_id"]] = obj["stop_name"]
-
-			if special == "multiple":
+			if multiple == True:
 				if obj[idField] not in d:
 					d[obj[idField]] = [obj]
 				else:
@@ -42,10 +44,37 @@ def readFile(path, idField, special):
 if folder is not None:
 
 	# read csv files	
-	stops = readFile(folder+"stops.txt", "stop_name", "stops")
-	routes = readFile(folder+"routes.txt", "route_id", None)
-	trips = readFile(folder+"trips.txt", "trip_id", None)
-	stopTimes = readFile(folder+"stop_times.txt", "trip_id", "multiple")
+	stopsAll = readFile(folder+"stops.txt", "stop_id", False)
+	routes = readFile(folder+"routes.txt", "route_id", False)
+	trips = readFile(folder+"trips.txt", "trip_id", False)
+	stopTimes = readFile(folder+"stop_times.txt", "trip_id", True)
+
+	# remove redundancy from the stops array
+	# this uses proximity to test and merge if close enough
+	nodes = [] # reduced list of stops becomes the node array
+	stopIds = {} # map of original ids to stop keys
+	for k in stopsAll:
+		stop = stopsAll[k]		
+		match = None
+		for i, check in enumerate(nodes):
+			x = float(check["stop_lon"]) - float(stop["stop_lon"])
+			y = float(check["stop_lat"]) - float(stop["stop_lat"])
+			p = math.hypot(x, y)
+			if check["stop_name"] == stop["stop_name"]:
+				pr = proxName
+			else:
+				pr = prox
+			if p < pr:
+				match = i
+				# uncomment the following two lines to see proximate stops being merged
+				# if p > 0.0:
+				# 	print stop["stop_name"] + " >>> " + check["stop_name"] + " prox: " + str(math.hypot(x,y))
+				break
+		if match is None:
+			nodes.append(stop)
+			stopIds[stop["stop_id"]] = len(nodes)-1
+		else:
+			stopIds[stop["stop_id"]] = i
 
 	# find longest set of stoptimes for each route
 	for k in stopTimes:
@@ -57,25 +86,14 @@ if folder is not None:
 		elif len(r["stops"]) < len(s):
 			r["stops"] = s
 
-	# create nodes array based on stops
-	nodes = []
-	nodeIndices = {}
-	i = 0
-	for k in stops:
-		n = stops[k]
-		nodeIndices[n["stop_name"]] = i
-		i += 1
-		nodes.append({ "name": n["stop_name"], "lat": n["stop_lat"], "lng": n["stop_lon"] })
-
 	# create edges between stops based on stop times
 	edges = {}
 	for k in routes:
 		r = routes[k]
 		lastIndex = None
 		if "stops" in r:
-			print "Finding stops for "+r["route_short_name"]
 			for s in r["stops"]:
-				thisIndex = nodeIndices[stopIds[s["stop_id"]]]
+				thisIndex = stopIds[s["stop_id"]]
 				if lastIndex == None:
 					lastIndex = thisIndex
 				else:
@@ -85,8 +103,8 @@ if folder is not None:
 								"source": lastIndex, 
 								"target": thisIndex, 
 								"value": 1, 
-								"sourceName": nodes[lastIndex]["name"],
-								"targetName": nodes[thisIndex]["name"],
+								"sourceName": nodes[lastIndex]["stop_name"],
+								"targetName": nodes[thisIndex]["stop_name"],
 								"routeId": r["route_id"],
 								"routeName": r["route_short_name"],
 								"routeColor": r["route_color"]
@@ -94,6 +112,11 @@ if folder is not None:
 					else:
 						edges[edgeId]["value"] += 1
 					lastIndex = thisIndex
+
+	# stats
+	print "################"
+	print str(len(nodes)) + " nodes"
+	print str(len(edges)) + " edges"
 
 	# write JSON file
 	output = open(dest, "w")
