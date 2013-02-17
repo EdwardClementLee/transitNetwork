@@ -14,8 +14,6 @@ proxName = 0.01 # proximity tolerance if the name is the same
 if len(sys.argv) > 3:
 	prox = float(sys.argv[3])
 
-
-
 # reads csv file and returns keyed dictionary of objects
 def readFile(path, idField, multiple):
 	d = {}
@@ -30,14 +28,17 @@ def readFile(path, idField, multiple):
 			for i, col in enumerate(row):
 				obj[headers[i]] = col
 
-			if multiple == True:
-				if obj[idField] not in d:
-					d[obj[idField]] = [obj]
-				else:
-					d[obj[idField]].append(obj)
+			if idField in obj:
+				if multiple == True:
+					if obj[idField] not in d:
+						d[obj[idField]] = [obj]
+					else:
+						d[obj[idField]].append(obj)
 
+				else:				
+					d[obj[idField]] = obj
 			else:
-				d[obj[idField]] = obj
+				print "Error: could not find column " + idField + " in " + path
 
 	return d
 
@@ -76,42 +77,32 @@ if folder is not None:
 		else:
 			stopIds[stop["stop_id"]] = i
 
-	# find longest set of stoptimes for each route
-	for k in stopTimes:
-		trip = trips[k]
-		s = stopTimes[k]
-		r = routes[trip["route_id"]]
-		if "stops" not in r:
-			r["stops"] = s
-		elif len(r["stops"]) < len(s):
-			r["stops"] = s
-
 	# create edges between stops based on stop times
 	edges = {}
-	for k in routes:
-		r = routes[k]
+	for k in stopTimes:
+		trip = trips[k]
+		route = routes[trip["route_id"]]
 		lastIndex = None
-		if "stops" in r:
-			for s in r["stops"]:
-				thisIndex = stopIds[s["stop_id"]]
-				if lastIndex == None:
-					lastIndex = thisIndex
+		for s in stopTimes[k]:
+			thisIndex = stopIds[s["stop_id"]]
+			if lastIndex == None:
+				lastIndex = thisIndex
+			else:
+				edgeId = route["route_id"]+"-"+str(lastIndex)+"-"+str(thisIndex)
+				if edgeId not in edges:
+					edges[edgeId] = { 
+							"source": lastIndex, 
+							"target": thisIndex, 
+							"value": 1, 
+							"sourceName": nodes[lastIndex]["stop_name"],
+							"targetName": nodes[thisIndex]["stop_name"],
+							"routeId": route["route_id"],
+							"routeName": route["route_short_name"],
+							"routeColor": route["route_color"]
+						}
 				else:
-					edgeId = r["route_id"]+"-"+str(lastIndex)+"-"+str(thisIndex)
-					if edgeId not in edges:
-						edges[edgeId] = { 
-								"source": lastIndex, 
-								"target": thisIndex, 
-								"value": 1, 
-								"sourceName": nodes[lastIndex]["stop_name"],
-								"targetName": nodes[thisIndex]["stop_name"],
-								"routeId": r["route_id"],
-								"routeName": r["route_short_name"],
-								"routeColor": r["route_color"]
-							}
-					else:
-						edges[edgeId]["value"] += 1
-					lastIndex = thisIndex
+					edges[edgeId]["value"] += 1
+				lastIndex = thisIndex
 
 	# stats
 	print "################"

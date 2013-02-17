@@ -21,10 +21,15 @@ body {
 
 .link {
   stroke: #999;
-  stroke-opacity: .6;
-  stroke-width: 2;
+  stroke-opacity: .4;
+  stroke-width: 1;
 }
 
+#controls {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+}
 #tooltip {
   display: none;
   position: absolute;
@@ -36,9 +41,32 @@ body {
 </style>
 </head>
 <body>
-<a href="#" onclick="changeLayout('force');">Force-directed</a> | <a href="#" onclick="changeLayout('geo');">Geographic</a>
+
+<div id="controls">
+  <div id="places"></div>
+  <a href="#" onclick="changeLayout('force');">Force-directed</a> | <a href="#" onclick="changeLayout('geo');">Geographic</a>
+</div>
+
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script>
+
+var datasets = [
+  "mta_subway": {
+    name: "NYC Subway",
+    file: "./mta_subway.json"
+  },
+  "mta_brooklyn_bus": {
+    name: "Brooklyn Bus",
+    file: "./mta_brooklyn_bus.json"
+  }
+];
+d3.selectAll("#places a")
+  .data(datasets)
+  .enter()
+    .append("a")
+      .attr("href", "#")
+      .text(function(d) { return d.name; })
+      .on("click", function(d) { console.log(d); return false; });
 
 var width = 1000,
     height = 800,
@@ -49,19 +77,27 @@ var width = 1000,
 
 var force = d3.layout.force()
     .charge(-640)
-    .gravity(0.4)
-    .friction(0.28)
+    .gravity(0.6)
+    .friction(0.4)
     .linkDistance(5)
-    .linkStrength(2.9)
+    .linkStrength(3.5)
     .size([width, height]);
 
 var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height);
 
+var line = d3.svg.line()
+    .x(function(d) { return d.x; })
+    .y(function(d) { return d.y; })
+    .interpolate("basis");
+
 var tooltip = d3.select("body").append("div").attr("id", "tooltip");
 
-d3.json("nyc.json", function(error, g) {
+d3.json("brooklyn.json", function(error, g) {
+// d3.json("bart.json", function(error, g) {
+// d3.json("nyc.json", function(error, g) {
+// d3.json("longisland.json", function(error, g) {
 
   graph = g;
 
@@ -69,6 +105,13 @@ d3.json("nyc.json", function(error, g) {
       .nodes(graph.nodes)
       .links(graph.edges)
       .start();
+
+  // create edge value scale
+  if(graph.edges[0].value) {
+    scales.edgeValue = d3.scale.pow()
+      .domain([ d3.min(graph.edges, function(d) { return d.value; }), d3.max(graph.edges, function(d) { return d.value; }) ])
+      .range([ 0.5, 6 ]);
+  }
 
   // *************** set up geographic projection based on lat/lon data
   var domains = {
@@ -91,13 +134,13 @@ d3.json("nyc.json", function(error, g) {
     domains.lon.min + (domains.lon.max - domains.lon.min) / 2,
     domains.lat.min + (domains.lat.max - domains.lat.min) / 2
   ];
-  var scalar = (domains.lon.max - domains.lon.min);
-  if ((domains.lat.max - domains.lat.min) > scalar) scalar =  domains.lat.max - domains.lat.min;
+  var rng = Math.max((domains.lon.max - domains.lon.min), (domains.lat.max - domains.lat.min)),
+      scalar = -45000 * rng + 110000;
   projection
     .center(center)
-    .scale(200000 * scalar);
+    .scale(scalar);
   var r = projection([ domains.lon.min, domains.lat.max ]);
-  r = [-1 * r[0] + width/2, -1 * r[1] + height/2 ];
+  r = [-r[0] + width/2, -r[1] + height/2];
   projection
     .translate(r);
 
@@ -105,9 +148,10 @@ d3.json("nyc.json", function(error, g) {
 
   var link = svg.selectAll(".link")
       .data(graph.edges)
-    .enter().append("line")
+    .enter().append("svg:path")
       .attr("class", "link")
-      .style("stroke", function(d) { return (d.routeColor) ? "#"+d.routeColor : null; });
+      .style("stroke", function(d) { return (d.routeColor) ? "#"+d.routeColor : null; })
+      .style("stroke-width", function(d) { return (d.value) ? scales.edgeValue(d.value) : null  });
 
   var node = svg.selectAll(".node")
       .data(graph.nodes)
@@ -132,22 +176,25 @@ d3.json("nyc.json", function(error, g) {
   force.on("tick", function(e) {
 
     if (mode == "geo") {
+      var snap = 0.4;
       graph.nodes.forEach(function(n) {
         var p = projection([ n.stop_lon, n.stop_lat ]);
         if (!n.fixed && !isNaN(p[0]) && !isNaN(p[1])) {
-          n.x -= (n.x - p[0]) * 0.3;
-          n.y -= (n.y - p[1]) * 0.3;          
+          n.x -= (n.x - p[0]) * snap;
+          n.y -= (n.y - p[1]) * snap;
         }
       });
     }
 
-    link.attr("x1", function(d) { return d.source.x; })
-        .attr("y1", function(d) { return d.source.y; })
-        .attr("x2", function(d) { return d.target.x; })
-        .attr("y2", function(d) { return d.target.y; });
+    link
+      .attr("d", function(d) { 
+        var points = [ { "x": d.source.x, "y": d.source.y }, { "x": d.target.x, "y": d.target.y } ];
+        return line(points) + "Z"; 
+      });
 
     node.attr("cx", function(d) { return d.x; })
         .attr("cy", function(d) { return d.y; });
+
   });
 });
 
