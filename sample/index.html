@@ -167,6 +167,8 @@ function loadGraph(options) {
       domains.lon.min + (domains.lon.max - domains.lon.min) / 2,
       domains.lat.min + (domains.lat.max - domains.lat.min) / 2
     ];
+    // crude attempt to automatically scale and center the projection
+    // TODO: make this better
     var rng = Math.max((domains.lon.max - domains.lon.min), (domains.lat.max - domains.lat.min)),
         scalar = -45000 * rng + 110000;
     projection
