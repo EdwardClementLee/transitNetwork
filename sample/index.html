@@ -58,7 +58,7 @@ body {
 var datasets = [
   {
     name: "NYC Subway",
-    file: "./mta_subway.json"
+    file: "./mta_subway.json"    
   },
   {
     name: "Brooklyn Bus",
@@ -96,8 +96,8 @@ var width = 1000,
       charge: -640,
       gravity: 0.6,
       friction: 0.4,
-      linkDistance: 5,
-      linkStrength: 3.5
+      linkDistance: function(d) { return (d.distance && scales.edgeDistance) ? scales.edgeDistance(d.distance) : 2; },
+      linkStrength: 10
     };
 
 var force = d3.layout.force()
@@ -119,30 +119,20 @@ function loadGraph(options) {
   d3.json(options.file, function(error, g) {
 
     console.log(g);
-
     graph = g;
-
-    var c = (options.charge) ? (options.charge) : defaultSettings.charge,
-        g = (options.gravity) ? (options.gravity) : defaultSettings.gravity,
-        f = (options.friction) ? (options.friction) : defaultSettings.friction,
-        ld = (options.linkDistance) ? (options.linkDistance) : defaultSettings.linkDistance,
-        ls = (options.linkStrength) ? (options.linkStrength) : defaultSettings.linkStrength;
-
-    force
-        .nodes(graph.nodes)
-        .links(graph.edges)
-        .charge(c)
-        .gravity(g)
-        .friction(f)
-        .linkDistance(ld)
-        .linkStrength(ls)
-        .start();
 
     // create edge value scale
     if(graph.edges[0].value) {
       scales.edgeValue = d3.scale.pow()
         .domain([ d3.min(graph.edges, function(d) { return d.value; }), d3.max(graph.edges, function(d) { return d.value; }) ])
         .range([ 0.5, 6 ]);
+    }
+
+    // create edge distance scale
+    if(graph.edges[0].distance) {
+      scales.edgeDistance = d3.scale.linear()
+        .domain([ d3.min(graph.edges, function(d) { return d.distance; }), d3.max(graph.edges, function(d) { return d.distance; }) ])
+        .range([ 3, 20 ]);
     }
 
     // *************** set up geographic projection based on lat/lon data
@@ -180,6 +170,22 @@ function loadGraph(options) {
       .translate(r);
 
     // *************** build graph
+
+    var c = (options.charge) ? (options.charge) : defaultSettings.charge,
+        g = (options.gravity) ? (options.gravity) : defaultSettings.gravity,
+        f = (options.friction) ? (options.friction) : defaultSettings.friction,
+        ld = (options.linkDistance) ? (options.linkDistance) : defaultSettings.linkDistance,
+        ls = (options.linkStrength) ? (options.linkStrength) : defaultSettings.linkStrength;
+
+    force
+        .nodes(graph.nodes)
+        .links(graph.edges)
+        .charge(c)
+        .gravity(g)
+        .friction(f)
+        .linkDistance(ld)
+        .linkStrength(ls)
+        .start();
 
     var link = svg.selectAll(".link")
         .data(graph.edges);
@@ -242,6 +248,8 @@ function loadGraph(options) {
   });
 
 }
+
+loadGraph(datasets[0]);
 
 function changeLayout(m) {
   mode = m;

@@ -100,6 +100,11 @@ if folder is not None:
 							"routeName": route["route_short_name"],
 							"routeColor": route["route_color"]
 						}
+					# if lat/lon data included, calculate geographic distance between stops
+					if "stop_lat" in nodes[lastIndex] and "stop_lat" in nodes[thisIndex]:
+						x = float(nodes[thisIndex]["stop_lon"]) - float(nodes[lastIndex]["stop_lon"])
+						y = float(nodes[thisIndex]["stop_lat"]) - float(nodes[lastIndex]["stop_lat"])
+						edges[edgeId]["distance"] = math.hypot(x, y)
 				else:
 					edges[edgeId]["value"] += 1
 				lastIndex = thisIndex
